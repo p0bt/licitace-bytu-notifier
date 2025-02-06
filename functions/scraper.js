@@ -83,7 +83,7 @@ function loadPreviousData() {
 async function sendEmailNotification(newData) {
   const mailOptions = {
     from: process.env.EMAIL_USER,
-    to: 'jennypeta732@gmail.com',
+    to: 'pbutora1@seznam.cz',
     subject: 'Nové licitace pro vás!',
     html: `
       <h1>Nové licitace nalazeny (o velikosti 3+1 a více):</h1>
