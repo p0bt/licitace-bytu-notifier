@@ -21,34 +21,41 @@ async function fetchData() {
   try {
     const { data } = await axios.get(URL);
     const $ = cheerio.load(data);
-    const rows = $('body').html().split('\n').map(row => row.trim()).filter(row => row.length > 0);
-
+    
+    // Select all <p> tags and iterate through them
     const results = [];
-    let lastSize = null;  // To store the most recent size value
-    let lastLink = null;  // To store the last found link
-
-    rows.forEach(row => {
-      const sizeMatch = row.match(/(\d\+\d)/);  // Matches sizes like 0+1, 1+3, etc.
-      const dateMatch = row.match(/\d{2}\.\d{2}\.\d{4}/);  // Matches dates like 17.02.2025
-
-      // Check for the link in the row
-      const linkMatch = row.match(/href="([^"]+)"/);  // Matches URLs in anchor tags (href="...")
+    let lastSize = null;
+    let lastLink = null;
+    
+    $('p').each((i, p) => {
+      const text = $(p).text().trim();  // Get the entire text from the paragraph
+      const sizeMatch = text.match(/(\d\+\d)/);  // Matches sizes like 0+1, 1+3, etc.
+      const dateMatch = text.match(/\d{2}\.\d{2}\.\d{4}/);  // Matches dates like 17.02.2025
+      const linkMatch = $(p).find('a').attr('href');  // Extract the link (href attribute)
+      
+      // If a link is found, update lastLink
       if (linkMatch) {
-        lastLink = linkMatch[1];  // Save the last found link
+        lastLink = linkMatch;
       }
 
-      // If a size is found, update the lastSize
+      // Remove the <a> part from the description (the title link)
+      $(p).find('a').remove();  // This will remove the <a> tag and its contents from the paragraph
+
+      // Now the text in the paragraph will be cleaned of the <a> tag
+      const cleanedDescription = $(p).text().trim();  // Cleaned text without <a> tag
+
+      // If size is found, update lastSize
       if (sizeMatch) {
         lastSize = sizeMatch[0];
       }
 
-      // If a date is found and a size is available, create an entry
+      // If date is found and both size and link are present, create an entry
       if (dateMatch && lastSize && lastLink) {
         const entry = {
           size: lastSize,
-          description: row,
+          description: cleanedDescription,  // Use the cleaned description
           date: dateMatch[0],
-          link: lastLink, // Add the link to the entry
+          link: `https://www.mesto-bohumin.cz/${lastLink}`,  // Full URL for the link
         };
         results.push(entry);
       }
