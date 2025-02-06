@@ -21,7 +21,7 @@ async function fetchData() {
   try {
     const { data } = await axios.get(URL);
     const $ = cheerio.load(data);
-    const rows = $('body').text().split('\n').map(row => row.trim()).filter(row => row.length > 0);
+    const rows = $('body').html().split('\n').map(row => row.trim()).filter(row => row.length > 0);
 
     const results = [];
     let lastSize = null;  // To store the most recent size value
