@@ -1,0 +1,10 @@
+{
+  "name": "scrap-bot",
+  "version": "1.0.0",
+  "dependencies": {
+    "axios": "^1.0.0",
+    "cheerio": "^1.0.0",
+    "fs": "^0.0.1",
+    "nodemailer": "^6.8.0"
+  }
+}
