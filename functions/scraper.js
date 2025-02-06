@@ -25,20 +25,30 @@ async function fetchData() {
 
     const results = [];
     let lastSize = null;  // To store the most recent size value
+    let lastLink = null;  // To store the last found link
 
     rows.forEach(row => {
       const sizeMatch = row.match(/(\d\+\d)/);  // Matches sizes like 0+1, 1+3, etc.
       const dateMatch = row.match(/\d{2}\.\d{2}\.\d{4}/);  // Matches dates like 17.02.2025
 
-      if (sizeMatch) {
-        lastSize = sizeMatch[0];  // Update last seen size
+      // Check for the link in the row
+      const linkMatch = row.match(/href="([^"]+)"/);  // Matches URLs in anchor tags (href="...")
+      if (linkMatch) {
+        lastLink = linkMatch[1];  // Save the last found link
       }
 
-      if (dateMatch) {
+      // If a size is found, update the lastSize
+      if (sizeMatch) {
+        lastSize = sizeMatch[0];
+      }
+
+      // If a date is found and a size is available, create an entry
+      if (dateMatch && lastSize && lastLink) {
         const entry = {
           size: lastSize,
           description: row,
           date: dateMatch[0],
+          link: lastLink, // Add the link to the entry
         };
         results.push(entry);
       }
@@ -67,9 +77,37 @@ async function sendEmailNotification(newData) {
   const mailOptions = {
     from: process.env.EMAIL_USER,
     to: 'jennypeta732@gmail.com',
-    subject: 'New Property Listing Detected!',
-    text: `New listings found: \n\n${JSON.stringify(newData, null, 2)}`,
-  };
+    subject: 'Nové licitace pro vás!',
+    html: `
+      <h1>Nové licitace nalazeny (o velikosti 3+1 a více):</h1>
+      <table style="border-collapse: collapse; width: 100%; margin-top: 20px; border: 1px solid #ddd;">
+        <thead>
+          <tr>
+            <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Velikost bytu</th>
+            <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Popis</th>
+            <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Odkaz</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${newData
+            .map(entry => {
+              // Create a full URL for the link
+              const fullUrl = `https://www.mesto-bohumin.cz/${entry.link}`;
+              return `
+                <tr>
+                  <td style="border: 1px solid #ddd; padding: 8px;">${entry.size}</td>
+                  <td style="border: 1px solid #ddd; padding: 8px;">${entry.description}</td>
+                  <td style="border: 1px solid #ddd; padding: 8px;">
+                    <a href="${fullUrl}" title="Klikněte pro více informací" style="color: #0066cc;">Licitace Detail</a>
+                  </td>
+                </tr>
+              `;
+            })
+            .join('')}
+        </tbody>
+      </table>
+    `,
+  };  
 
   try {
     await transporter.sendMail(mailOptions);
@@ -87,20 +125,16 @@ exports.handler = async function (event, context) {
 
   let emailSent = false;
 
-  if (previousData) {
-    // Check for differences
-    const hasChanges = JSON.stringify(currentData) !== JSON.stringify(previousData);
-
-    if (hasChanges) {
-      // Check if any 'size' value matches the target sizes
-      const relevantNewEntries = currentData.filter(entry => TARGET_SIZES.includes(entry.size));
-
-      if (relevantNewEntries.length > 0) {
-        await sendEmailNotification(relevantNewEntries);
-        emailSent = true;
-      }
+  if (JSON.stringify(currentData) !== JSON.stringify(previousData)) {
+    // Check if any 'size' value matches the target sizes
+    const relevantNewEntries = currentData.filter(entry => TARGET_SIZES.includes(entry.size));
+  
+    if (relevantNewEntries.length > 0) {
+      await sendEmailNotification(relevantNewEntries);
+      emailSent = true;
     }
   }
+  
 
   // Save the new data
   saveDataToFile(currentData);
