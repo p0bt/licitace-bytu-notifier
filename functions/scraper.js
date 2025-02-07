@@ -19,7 +19,7 @@ const transporter = nodemailer.createTransport({
 
 async function fetchData() {
   try {
-    const { data } = await axios.get(URL);
+    const { data } = await axios.get(URL, { responseEncoding: 'utf8' });
     const $ = cheerio.load(data);
     
     // Select all <p> tags and iterate through them
@@ -132,16 +132,27 @@ exports.handler = async function (event, context) {
 
   let emailSent = false;
 
-  if (JSON.stringify(currentData) !== JSON.stringify(previousData)) {
-    // Check if any 'size' value matches the target sizes
-    const relevantNewEntries = currentData.filter(entry => TARGET_SIZES.includes(entry.size));
+  if (previousData) {
+    // Check if there are any differences
+    const hasChanges = JSON.stringify(currentData) !== JSON.stringify(previousData);
+
+    console.log("HAS CHANGES:"+hasChanges)
   
-    if (relevantNewEntries.length > 0) {
-      await sendEmailNotification(relevantNewEntries);
-      emailSent = true;
+    if (hasChanges) {
+      // Find only the new unique offers that aren't in previousData
+      const newEntries = currentData.filter(entry => 
+        !previousData.some(prev => JSON.stringify(prev) === JSON.stringify(entry))
+      );
+  
+      // Filter relevant offers based on size
+      const relevantNewEntries = newEntries.filter(entry => TARGET_SIZES.includes(entry.size));
+  
+      // Send email only if there are relevant new entries
+      if (relevantNewEntries.length > 0) {
+        await sendEmailNotification(relevantNewEntries);
+      }
     }
   }
-  
 
   // Save the new data
   saveDataToFile(currentData);
