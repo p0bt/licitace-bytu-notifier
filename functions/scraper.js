@@ -91,7 +91,7 @@ async function saveDataToSupabase(data) {
 
 async function loadPreviousData() {
   const { data, error } = await supabase.storage.from(BUCKET_NAME).download(FILE_NAME);
-  if (error) {
+  if (error || !data) {
     console.error('Error loading previous data:', error);
     return null;
   }
