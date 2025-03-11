@@ -151,7 +151,7 @@ exports.handler = async function (event, context) {
   console.log('Scraper triggered via Netlify function');
 
   const currentData = await fetchData();
-  const previousData = loadPreviousData();
+  const previousData = await loadPreviousData();
 
   let emailSent = false;
 
