@@ -96,7 +96,7 @@ async function loadPreviousData() {
     return null;
   }
 
-  return JSON.parse(await data.text());
+  return JSON.parse(await data.text()).data;
 }
 
 async function saveDataToFile(data) {
@@ -156,6 +156,7 @@ exports.handler = async function (event, context) {
   let emailSent = false;
 
   if (previousData) {
+    console.log("previousData", previousData);
     // Check if there are any differences
     const hasChanges = JSON.stringify(currentData) !== JSON.stringify(previousData);
 
