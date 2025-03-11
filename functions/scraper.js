@@ -1,12 +1,19 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
-const fs = require('fs');
 const path = require('path');
 const nodemailer = require('nodemailer');
+const { createClient } = require('@supabase/supabase-js');
 
 const URL = 'https://www.mesto-bohumin.cz/cz/radnice/byty-nebyty-nemovitosti/licitace-bytu';
-const TARGET_SIZES = ['1+3', '3+1', '1+4', '4+1', '1+5', '5+1'];
-const JSON_FILE = path.join('/tmp', 'licitace_data.json');  // Use /tmp for Netlify function storage
+const TARGET_SIZES = ['0+3', '0+4', '0+5', '1+3', '3+1', '1+4', '4+1', '1+5', '5+1'];
+
+
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_KEY;
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const BUCKET_NAME = 'licitace-data';
+const FILE_NAME = 'licitace_data.json';
 
 // Configure email transporter (replace with your email credentials)
 const transporter = nodemailer.createTransport({
@@ -21,18 +28,18 @@ async function fetchData() {
   try {
     const { data } = await axios.get(URL, { responseEncoding: 'utf8' });
     const $ = cheerio.load(data);
-    
+
     // Select all <p> tags and iterate through them
     const results = [];
     let lastSize = null;
     let lastLink = null;
-    
+
     $('p').each((i, p) => {
       const text = $(p).text().trim();  // Get the entire text from the paragraph
       const sizeMatch = text.match(/(\d\+\d)/);  // Matches sizes like 0+1, 1+3, etc.
       const dateMatch = text.match(/\d{2}\.\d{2}\.\d{4}/);  // Matches dates like 17.02.2025
       const linkMatch = $(p).find('a').attr('href');  // Extract the link (href attribute)
-      
+
       // If a link is found, update lastLink
       if (linkMatch) {
         lastLink = linkMatch;
@@ -68,22 +75,38 @@ async function fetchData() {
   }
 }
 
-function saveDataToFile(data) {
-  fs.writeFileSync(JSON_FILE, JSON.stringify(data, null, 2));
+async function saveDataToSupabase(data) {
+  const jsonData = JSON.stringify(data, null, 2);
+  const { error } = await supabase.storage.from(BUCKET_NAME).upload(FILE_NAME, jsonData, {
+    contentType: 'application/json',
+    upsert: true,  // Overwrite if it exists
+  });
+
+  if (error) {
+    console.error('Error uploading file to Supabase:', error);
+  } else {
+    console.log('Data saved successfully to Supabase Storage');
+  }
 }
 
-function loadPreviousData() {
-  if (fs.existsSync(JSON_FILE)) {
-    const rawData = fs.readFileSync(JSON_FILE);
-    return JSON.parse(rawData);
+async function loadPreviousData() {
+  const { data, error } = await supabase.storage.from(BUCKET_NAME).download(FILE_NAME);
+  if (error) {
+    console.error('Error loading previous data:', error);
+    return null;
   }
-  return null;
+
+  return JSON.parse(await data.text());
+}
+
+async function saveDataToFile(data) {
+  await saveDataToSupabase(data);
 }
 
 async function sendEmailNotification(newData) {
   const mailOptions = {
     from: process.env.EMAIL_USER,
-    to: 'pbutora1@seznam.cz',
+    to: process.env.EMAIL_TO,
     subject: 'Nové licitace pro vás!',
     html: `
       <h1>Nové licitace nalazeny (o velikosti 3+1 a více):</h1>
@@ -97,10 +120,10 @@ async function sendEmailNotification(newData) {
         </thead>
         <tbody>
           ${newData
-            .map(entry => {
-              // Create a full URL for the link
-              const fullUrl = `https://www.mesto-bohumin.cz/${entry.link}`;
-              return `
+        .map(entry => {
+          // Create a full URL for the link
+          const fullUrl = `https://www.mesto-bohumin.cz/${entry.link}`;
+          return `
                 <tr>
                   <td style="border: 1px solid #ddd; padding: 8px;">${entry.size}</td>
                   <td style="border: 1px solid #ddd; padding: 8px;">${entry.description}</td>
@@ -109,12 +132,12 @@ async function sendEmailNotification(newData) {
                   </td>
                 </tr>
               `;
-            })
-            .join('')}
+        })
+        .join('')}
         </tbody>
       </table>
     `,
-  };  
+  };
 
   try {
     await transporter.sendMail(mailOptions);
@@ -136,17 +159,17 @@ exports.handler = async function (event, context) {
     // Check if there are any differences
     const hasChanges = JSON.stringify(currentData) !== JSON.stringify(previousData);
 
-    console.log("HAS CHANGES:"+hasChanges)
-  
+    console.log("HAS CHANGES:" + hasChanges)
+
     if (hasChanges) {
       // Find only the new unique offers that aren't in previousData
-      const newEntries = currentData.filter(entry => 
+      const newEntries = currentData.filter(entry =>
         !previousData.some(prev => JSON.stringify(prev) === JSON.stringify(entry))
       );
-  
+
       // Filter relevant offers based on size
       const relevantNewEntries = newEntries.filter(entry => TARGET_SIZES.includes(entry.size));
-  
+
       // Send email only if there are relevant new entries
       if (relevantNewEntries.length > 0) {
         await sendEmailNotification(relevantNewEntries);
@@ -155,7 +178,7 @@ exports.handler = async function (event, context) {
   }
 
   // Save the new data
-  saveDataToFile(currentData);
+  await saveDataToFile(currentData);
 
   return {
     statusCode: 200,

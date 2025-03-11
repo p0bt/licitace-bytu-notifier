@@ -2,6 +2,7 @@
   "name": "scrap-bot",
   "version": "1.0.0",
   "dependencies": {
+    "@supabase/supabase-js": "^2.49.1",
     "axios": "^1.0.0",
     "cheerio": "^1.0.0",
     "nodemailer": "^6.8.0"
